@@ -1,0 +1,97 @@
+---
+title: "Exercises Day 5"
+author: "Your name"
+output: pdf_document
+date: "`r Sys.Date()`"
+---
+
+```{r setup, include=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(MASS)
+library(car)
+## be careful to load dplyr after MASS
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(lme4)
+library(simr)
+library(ggeffects)
+library(lmerTest)
+# To solve some conflicts between packages:
+select <- dplyr::select
+
+```
+
+# Exercise 1
+Using the model above from previous exercises, plot the predicted effects for the Session fixed effect, the predicted effects for the the interaction between Session and BlockType as well as the threeway interaction between Session, BlockType and Group. Include confidence intervals as well as correct axis labeling. Also remember that RT was transformed for the model above, but that the plots should be shown in milliseconds.
+
+```{r Ex1, include=TRUE}
+load("CogTrainingData.RData")
+
+CogModelData <-
+  Cog_training_Data %>%
+  mutate(trans_RT = 1/(RT)) %>%
+  mutate(Session = as.factor(Session)) %>%
+  mutate(Group = as.factor(Group)) %>%
+  mutate(BlockType = as.factor(ifelse(TrialType == "pure", "pure", "non-pure")))
+
+contrasts(CogModelData$Session)
+contrasts(CogModelData$Group) <- contr.sum(2)/2
+contrasts(CogModelData$Group)
+contrasts(CogModelData$BlockType) <- contr.sum(2)/2
+contrasts(CogModelData$BlockType)
+
+Model_10 = lmer(trans_RT ~ BlockType*Group*Session + (1| Subject) + (1| Item), data=CogModelData)
+summary(Model_10)
+```
+
+```{r Ex1b, include=TRUE}
+Model_10 %>%
+  predict_response(c("Session")) %>%
+  ggplot(aes(x=as.numeric(x), y=1/predicted)) + 
+  geom_line(linewidth=1.7) +
+  scale_x_continuous(name = "Session", breaks=c(1,2)) +
+  scale_y_continuous(name = "RT [ms]") +
+  ggtitle("Predicted effects for Session") +
+  geom_ribbon(aes(ymin=1/conf.low, ymax=1/conf.high), alpha = 0.3, colour = NA) +
+  theme_classic() +
+  theme(text = element_text(size=24), element_line(size = 2))
+
+Model_10 %>%
+  predict_response(c("Session", "BlockType")) %>%
+  ggplot(aes(x=as.numeric(x), y=1/predicted, color=group, fill=group)) + 
+  geom_line(linewidth=1.7) +
+  geom_ribbon(aes(ymin=1/conf.low, ymax=1/conf.high), alpha = 0.3, colour = NA) +
+  scale_x_continuous(name = "Session", breaks=c(1,2)) +
+  scale_y_continuous(name = "RT [ms]") +
+  ggtitle("Predicted effects for BlockType:Session") +
+  theme_classic() +
+  theme(text = element_text(size=24), element_line(size = 2))
+
+Model_10 %>%
+  predict_response(c("Session", "BlockType", "Group")) %>%
+  ggplot(aes(x=as.numeric(x), y=1/predicted, color=group, fill=group)) + 
+  geom_line(linewidth=1.7) +
+  geom_ribbon(aes(ymin=1/conf.low, ymax=1/conf.high), alpha = 0.3, colour = NA) +
+  scale_x_continuous(name = "Session", breaks=c(1,2)) +
+  scale_y_continuous(name = "RT [ms]") +
+  ggtitle("Predicted effects for BlockType:Session:Group") +
+  facet_grid(cols=vars(facet)) +
+  theme_classic() +
+  theme(text = element_text(size=24), element_line(size = 2))
+
+```
+# Exercise 2
+a) What is the power of the BlockType Session interaction in the model used in exercise 1a for the session effect, when testing for 10 simulations?
+
+```{r Ex2a, include=TRUE, warning=FALSE}
+powerSim(Model_10, nsim=20, test = fcompare(trans_RT~BlockType:Session))
+
+```
+b) Currently the data set has 44 subjects. What would be the power of the Blocktype Session interaction with only 20 subjects?
+
+```{r Ex2b, include=TRUE, warning=FALSE}
+Model_11 <- extend(Model_10, within="Subject+BlockType", n=10)
+
+powerSim(Model_11, nsim=20, test = fcompare(trans_RT~BlockType), progress = FALSE)
+```
